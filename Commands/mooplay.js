@@ -10,6 +10,9 @@ const {
   VoiceConnectionStatus,
 } = require("@discordjs/voice");
 
+// Create a queue to store songs
+const queue = [];
+
 module.exports = {
   name: "mooplay",
   description: "Play a song from YouTube",
@@ -40,50 +43,78 @@ module.exports = {
       videoTitle = searchResults.results[0].title; // Store the title of the first search result
     }
 
-    const player = createAudioPlayer();
-    const connection = joinVoiceChannel({
-      channelId: voiceChannel.id,
-      guildId: message.guild.id,
-      adapterCreator: message.guild.voiceAdapterCreator,
-    });
+    // Create an audio resource for the new song
+    const stream = ytdl(videoUrl, { filter: "audioonly" });
+    const resource = createAudioResource(stream);
 
-    client.player = player;
-    client.connection = connection;
-
-    try {
-      const stream = ytdl(videoUrl, { filter: "audioonly" });
-      const resource = createAudioResource(stream);
-
-      connection.on(VoiceConnectionStatus.Ready, () => {
-        if (connection && connection.voice) {
-          try {
-            connection.voice.setSelfDeaf(true);
-          } catch (err) {
-            console.error("Error setting self deaf:", err);
-          }
-        }
+    if (client.player && client.connection) {
+      // Calculate the song position in the queue
+      const songPosition = queue.length;
+      // Add the new song to the queue
+      queue.push({ resource, videoTitle, videoUrl });
+      message.channel.send(
+        `Added to queue (Song ${songPosition}): [**${videoTitle}**](${videoUrl})`
+      );
+    } else {
+      // Create a new player and connection if none exists
+      const player = createAudioPlayer();
+      const connection = joinVoiceChannel({
+        channelId: voiceChannel.id,
+        guildId: message.guild.id,
+        adapterCreator: message.guild.voiceAdapterCreator,
       });
 
-      connection.on(VoiceConnectionStatus.Disconnected, () => {
-        setTimeout(() => {
-          if (connection.state.status === VoiceConnectionStatus.Disconnected) {
+      client.player = player;
+      client.connection = connection;
+
+      try {
+        connection.on(VoiceConnectionStatus.Ready, () => {
+          if (connection && connection.voice) {
+            try {
+              connection.voice.setSelfDeaf(true);
+            } catch (err) {
+              console.error("Error setting self-deaf:", err);
+            }
+          }
+        });
+
+        connection.on(VoiceConnectionStatus.Disconnected, () => {
+          setTimeout(() => {
+            if (
+              connection.state.status === VoiceConnectionStatus.Disconnected
+            ) {
+              connection.destroy();
+            }
+          }, 5000);
+        });
+
+        player.play(resource);
+        connection.subscribe(player);
+        player.on(AudioPlayerStatus.Idle, () => {
+          // Check if there are songs in the queue
+          if (queue.length > 0) {
+            const nextSong = queue.shift();
+            const songPosition = queue.length; // Calculate the correct song position
+            player.play(nextSong.resource);
+            message.channel.send(
+              `Now playing (Song ${songPosition}): [**${nextSong.videoTitle}**](${nextSong.videoUrl})`
+            );
+          } else {
+            player.stop();
             connection.destroy();
           }
-        }, 5000);
-      });
+        });
 
-      player.play(resource);
-      connection.subscribe(player);
-      player.on(AudioPlayerStatus.Idle, () => {
-        player.stop();
-        connection.destroy();
-      });
-
-      // Send a message with a clickable link for the video title
-      message.channel.send(`Now playing: [**${videoTitle}**](${videoUrl})`);
-    } catch (err) {
-      console.error(err);
-      message.channel.send("An error occurred while trying to play the audio.");
+        // Send a message with the currently playing song
+        message.channel.send(
+          `Now playing (Song 0): [**${videoTitle}**](${videoUrl})`
+        );
+      } catch (err) {
+        console.error(err);
+        message.channel.send(
+          "An error occurred while trying to play the audio."
+        );
+      }
     }
   },
 };
