@@ -79,11 +79,8 @@ module.exports = {
         connection.destroy();
       });
 
-      if (videoTitle) {
-        message.channel.send(`Now playing: [**${videoTitle}**](${videoUrl})`);
-      } else {
-        message.channel.send(`Now playing: ${videoUrl}`);
-      }
+      // Send a message with a clickable link for the video title
+      message.channel.send(`Now playing: [**${videoTitle}**](${videoUrl})`);
     } catch (err) {
       console.error(err);
       message.channel.send("An error occurred while trying to play the audio.");
