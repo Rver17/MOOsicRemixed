@@ -1,22 +1,41 @@
+require("dotenv").config();
+
 const ytdl = require("ytdl-core");
-const { 
-  joinVoiceChannel, 
-  createAudioResource, 
-  createAudioPlayer, 
-  AudioPlayerStatus, 
-  VoiceConnectionStatus 
+const search = require("youtube-search");
+const {
+  joinVoiceChannel,
+  createAudioResource,
+  createAudioPlayer,
+  AudioPlayerStatus,
+  VoiceConnectionStatus,
 } = require("@discordjs/voice");
 
 module.exports = {
-  name: 'mooplay',
-  description: 'Play a song from YouTube',
-  async execute(message, args, client) { 
-    if (!args.length) {
-      return message.channel.send("Please provide a YouTube URL.");
-    }
+  name: "mooplay",
+  description: "Play a song from YouTube",
+  async execute(message, args, client) {
     const voiceChannel = message.member.voice.channel;
     if (!voiceChannel) {
       return message.channel.send("You need to be in a voice channel to play music!");
+    }
+
+    let videoUrl = args[0];
+    let videoTitle = ""; // Variable to store the title of the video
+
+    // If the first argument is not a URL, search YouTube
+    if (!ytdl.validateURL(videoUrl)) {
+      const opts = {
+        maxResults: 1,
+        key: process.env.YOUTUBE_API_KEY,
+        type: "video",
+      };
+
+      const searchResults = await search(args.join(" "), opts);
+      if (searchResults.results.length === 0) {
+        return message.channel.send("No results found.");
+      }
+      videoUrl = searchResults.results[0].link;
+      videoTitle = searchResults.results[0].title; // Store the title of the first search result
     }
 
     const player = createAudioPlayer();
@@ -26,12 +45,11 @@ module.exports = {
       adapterCreator: message.guild.voiceAdapterCreator,
     });
 
-    // Update client's player and connection
     client.player = player;
     client.connection = connection;
 
     try {
-      const stream = ytdl(args[0], { filter: "audioonly" });
+      const stream = ytdl(videoUrl, { filter: "audioonly" });
       const resource = createAudioResource(stream);
 
       connection.on(VoiceConnectionStatus.Ready, () => {
@@ -44,7 +62,6 @@ module.exports = {
         }
       });
 
-      // Handle potential disconnections
       connection.on(VoiceConnectionStatus.Disconnected, () => {
         setTimeout(() => {
           if (connection.state.status === VoiceConnectionStatus.Disconnected) {
@@ -59,6 +76,12 @@ module.exports = {
         player.stop();
         connection.destroy();
       });
+
+      if (videoTitle) {
+        message.channel.send(`Now playing: **${videoTitle}**\nLink: ${videoUrl}`);
+      } else {
+        message.channel.send(`Now playing: ${videoUrl}`);
+      }
     } catch (err) {
       console.error(err);
       message.channel.send("An error occurred while trying to play the audio.");
