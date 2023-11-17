@@ -16,7 +16,9 @@ module.exports = {
   async execute(message, args, client) {
     const voiceChannel = message.member.voice.channel;
     if (!voiceChannel) {
-      return message.channel.send("You need to be in a voice channel to play music!");
+      return message.channel.send(
+        "You need to be in a voice channel to play music!"
+      );
     }
 
     let videoUrl = args[0];
@@ -78,7 +80,7 @@ module.exports = {
       });
 
       if (videoTitle) {
-        message.channel.send(`Now playing: **${videoTitle}**\nLink: ${videoUrl}`);
+        message.channel.send(`Now playing: [**${videoTitle}**](${videoUrl})`);
       } else {
         message.channel.send(`Now playing: ${videoUrl}`);
       }
