@@ -10,8 +10,9 @@ const {
   VoiceConnectionStatus,
 } = require("@discordjs/voice");
 
-// Create a queue to store songs
+// Create a queue to store songs and a variable to track total songs played
 const queue = [];
+let totalSongsPlayed = 0;
 
 module.exports = {
   name: "mooplay",
@@ -25,9 +26,8 @@ module.exports = {
     }
 
     let videoUrl = args[0];
-    let videoTitle = ""; // Variable to store the title of the video
+    let videoTitle = "";
 
-    // If the first argument is not a URL, search YouTube
     if (!ytdl.validateURL(videoUrl)) {
       const opts = {
         maxResults: 1,
@@ -40,23 +40,20 @@ module.exports = {
         return message.channel.send("No results found.");
       }
       videoUrl = searchResults.results[0].link;
-      videoTitle = searchResults.results[0].title; // Store the title of the first search result
+      videoTitle = searchResults.results[0].title;
     }
 
-    // Create an audio resource for the new song
     const stream = ytdl(videoUrl, { filter: "audioonly" });
     const resource = createAudioResource(stream);
 
     if (client.player && client.connection) {
-      // Calculate the song position in the queue
-      const songPosition = queue.length + 1;
-      // Add the new song to the queue
-      queue.push({ resource, videoTitle, videoUrl });
+      totalSongsPlayed++;
+      const songNumber = totalSongsPlayed;
+      queue.push({ resource, videoTitle, videoUrl, songNumber });
       message.channel.send(
-        `Added to queue (Song ${songPosition}): [**${videoTitle}**](${videoUrl})`
+        `Added to queue (Song ${songNumber}): [**${videoTitle}**](${videoUrl})`
       );
     } else {
-      // Create a new player and connection if none exists
       const player = createAudioPlayer();
       const connection = joinVoiceChannel({
         channelId: voiceChannel.id,
@@ -88,26 +85,39 @@ module.exports = {
           }, 5000);
         });
 
+        totalSongsPlayed++;
         player.play(resource);
         connection.subscribe(player);
+
         player.on(AudioPlayerStatus.Idle, () => {
-          // Check if there are songs in the queue
           if (queue.length > 0) {
             const nextSong = queue.shift();
-            const songPosition = queue.length + 1; // Calculate the correct song position
-            player.play(nextSong.resource);
             message.channel.send(
-              `Now playing (Song ${songPosition}): [**${nextSong.videoTitle}**](${nextSong.videoUrl})`
+              `Finished playing (Song ${nextSong.songNumber}): [**${nextSong.videoTitle}**](${nextSong.videoUrl})`
             );
+
+            if (queue.length > 0) {
+              const nextSong = queue[0];
+              player.play(nextSong.resource);
+              message.channel.send(
+                `Now playing (Song ${nextSong.songNumber}): [**${nextSong.videoTitle}**](${nextSong.videoUrl})`
+              );
+            } else {
+              player.stop();
+              connection.destroy();
+              // Reset totalSongsPlayed when queue is empty
+              totalSongsPlayed = 0;
+            }
           } else {
             player.stop();
             connection.destroy();
+            // Reset totalSongsPlayed when queue is empty
+            totalSongsPlayed = 0;
           }
         });
 
-        // Send a message with the currently playing song
         message.channel.send(
-          `Now playing (Song 1): [**${videoTitle}**](${videoUrl})`
+          `Now playing (Song ${totalSongsPlayed}): [**${videoTitle}**](${videoUrl})`
         );
       } catch (err) {
         console.error(err);
@@ -117,4 +127,5 @@ module.exports = {
       }
     }
   },
+  queue,
 };
