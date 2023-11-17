@@ -49,7 +49,7 @@ module.exports = {
 
     if (client.player && client.connection) {
       // Calculate the song position in the queue
-      const songPosition = queue.length;
+      const songPosition = queue.length + 1;
       // Add the new song to the queue
       queue.push({ resource, videoTitle, videoUrl });
       message.channel.send(
@@ -94,7 +94,7 @@ module.exports = {
           // Check if there are songs in the queue
           if (queue.length > 0) {
             const nextSong = queue.shift();
-            const songPosition = queue.length; // Calculate the correct song position
+            const songPosition = queue.length + 1; // Calculate the correct song position
             player.play(nextSong.resource);
             message.channel.send(
               `Now playing (Song ${songPosition}): [**${nextSong.videoTitle}**](${nextSong.videoUrl})`
@@ -107,7 +107,7 @@ module.exports = {
 
         // Send a message with the currently playing song
         message.channel.send(
-          `Now playing (Song 0): [**${videoTitle}**](${videoUrl})`
+          `Now playing (Song 1): [**${videoTitle}**](${videoUrl})`
         );
       } catch (err) {
         console.error(err);
