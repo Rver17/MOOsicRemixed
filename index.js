@@ -4,6 +4,9 @@ const fs = require("fs");
 const { Client, GatewayIntentBits } = require("discord.js");
 const { joinVoiceChannel } = require("@discordjs/voice");
 
+const MusicQueueManager = require('./Components/MusicQueueManager'); // Adjust path as needed
+const queueManager = new MusicQueueManager();
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -51,7 +54,7 @@ client.on("interactionCreate", async (interaction) => {
 
   try {
     // Execute the corresponding command, passing the interaction as the first parameter
-    await musicCommand.execute(interaction, [], client); // Note: 'args' is passed as an empty array
+    await musicCommand.execute(interaction, [], client, queueManager); // Note: 'args' is passed as an empty array
   } catch (error) {
     console.error(error);
     await interaction.reply({
@@ -76,7 +79,7 @@ client.on("messageCreate", async (message) => {
 
   const command = client.commands.get(commandName);
   try {
-    command.execute(message, args, client);
+    command.execute(message, args, client, queueManager);
   } catch (error) {
     console.error(error);
     message.channel.send("There was an error executing that command!");

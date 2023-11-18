@@ -1,12 +1,11 @@
 const { AudioPlayerStatus } = require("@discordjs/voice");
-const { getGuildQueue } = require("./mooplay");
 
 module.exports = {
   name: 'moopause',
   description: 'Pause or resume the music',
-  async execute(interactionOrMessage, args, client) {
+  async execute(interactionOrMessage, args, client, queueManager) {
     const guildId = interactionOrMessage.guild.id;
-    const queue = getGuildQueue(guildId);
+    const queue = queueManager.getQueue(guildId); // Use queueManager to get the queue
 
     if (!queue.player) {
       const replyText = 'No music is currently playing.';

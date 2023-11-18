@@ -1,12 +1,11 @@
 const { AudioPlayerStatus } = require("@discordjs/voice");
-const { getGuildQueue } = require("./mooplay");
 
 module.exports = {
   name: 'moostop',
   description: 'Stop the music and leave the channel',
-  execute(message, args, client) {
+  execute(message, args, client, queueManager) {
     const guildId = message.guild.id;
-    const queue = getGuildQueue(guildId);
+    const queue = queueManager.getQueue(guildId);
 
     if (!queue.connection) {
       return message.reply('Not connected to any voice channel.');

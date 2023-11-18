@@ -16,23 +16,6 @@ const {
   EmbedBuilder,
 } = require("discord.js");
 
-// Create a Map to store guild-specific queues
-const guildQueues = new Map();
-
-function getGuildQueue(guildId) {
-  if (!guildQueues.has(guildId)) {
-    guildQueues.set(guildId, {
-      songs: [],
-      totalSongsPlayed: 0,
-      isPlaying: false,
-      player: null,
-      connection: null,
-    });
-  }
-  return guildQueues.get(guildId);
-}
-
-let totalSongsPlayed = 0;
 const state = {
   isPlaying: false,
 }; // Flag to track if a song is currently playing
@@ -64,8 +47,8 @@ async function getVideoDuration(videoUrl) {
   }
 }
 
-async function playNextSong(client, guildId, sendNowPlayingMessage = true) {
-  const queue = getGuildQueue(guildId);
+async function playNextSong(client, guildId, sendNowPlayingMessage = true, queueManager) {
+  const queue = queueManager.getQueue(guildId);
   if (queue.songs.length > 0) {
     const nextSong = queue.songs.shift();
     console.log(`Playing next song: ${nextSong.videoTitle}`);
@@ -120,8 +103,8 @@ async function playNextSong(client, guildId, sendNowPlayingMessage = true) {
   }
 }
 
-function stopPlayback(client, guildId) {
-  const queue = getGuildQueue(guildId);
+function stopPlayback(client, guildId, queueManager) {
+  const queue = queueManager.getQueue(guildId);
   console.log(
     "stopPlayback function called, stopping player and destroying connection"
   );
@@ -133,7 +116,7 @@ function stopPlayback(client, guildId) {
   state.isPlaying = false;
 }
 
-function clearQueue(guildId) {
+function clearQueue(guildId, queueManager) {
   const queue = getGuildQueue(guildId);
   queue.songs = [];
 }
@@ -141,17 +124,14 @@ function clearQueue(guildId) {
 module.exports = {
   name: "mooplay",
   description: "Play a song from YouTube",
-  async execute(message, args, client) {
-    console.log("Execute function called");
+  async execute(message, args, client, queueManager) {
     const voiceChannel = message.member.voice.channel;
     if (!voiceChannel) {
-      return message.channel.send(
-        "You need to be in a voice channel to play music!"
-      );
+      return message.channel.send("You need to be in a voice channel to play music!");
     }
 
     const guildId = message.guild.id;
-    const queue = getGuildQueue(guildId);
+    const queue = queueManager.getQueue(guildId); // Use queueManager to get the queue
 
     let videoUrl = args[0];
     let videoTitle = "";
@@ -193,7 +173,7 @@ module.exports = {
       queue.player = createAudioPlayer();
       queue.player.on(AudioPlayerStatus.Idle, () => {
         if (queue.songs.length > 0) {
-          playNextSong(client, guildId);
+          playNextSong(client, guildId, true, queueManager);
         } else {
           queue.isPlaying = false;
         }
@@ -238,7 +218,8 @@ module.exports = {
         textChannelId: message.channel.id, // Store the text channel ID here
       });
       queue.isPlaying = true;
-      playNextSong(client, guildId);
+      playNextSong(client, guildId, true, queueManager);
+
 
       const nowPlayingMessage = await message.channel.send(
         `Now playing (Song ${queue.totalSongsPlayed}): [**${videoTitle}**](${videoUrl})`
@@ -299,7 +280,6 @@ module.exports = {
 
     await message.channel.send({ embeds: [controlEmbed], components: [row] });
   },
-  getGuildQueue,
   playNextSong,
   stopPlayback,
   clearQueue,
