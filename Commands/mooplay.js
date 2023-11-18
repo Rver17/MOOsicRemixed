@@ -261,9 +261,6 @@ module.exports = {
         const formattedTime = formatTime(currentTime);
         const formattedDuration = formatTime(videoDuration);
 
-        await nowPlayingMessage.edit(
-          `${progressBar} (${formattedTime}/${formattedDuration})`
-        );
       }, 15000);
     } else {
       queue.totalSongsPlayed++;
