@@ -9,8 +9,8 @@ module.exports = {
     }
 
     // Create a string to display the queue
-    const queueList = queue.map(song => {
-      return `Song ${song.songNumber}: [**${song.videoTitle}**](${song.videoUrl})`;
+    const queueList = queue.map((song) => {
+      return `Song ${song.songNumber}: \`${song.videoTitle}\``;
     });
 
     message.channel.send(`**Queue:**\n${queueList.join("\n")}`);
