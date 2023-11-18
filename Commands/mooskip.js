@@ -1,24 +1,22 @@
-const { playNextSong, stopPlayback, state, queue } = require('./mooplay');
+const { playNextSong, stopPlayback, getGuildQueue } = require("./mooplay");
 
 module.exports = {
   name: "mooskip",
   description: "Skip the current song",
   execute(message, args, client) {
-    if (!client.player || !state.isPlaying) {
+    const guildQueue = getGuildQueue(message.guild.id);
+
+    if (!guildQueue.player || !guildQueue.isPlaying) {
       return message.channel.send("No song is currently playing!");
     }
 
-    // Stop the current song
-    client.player.stop();
+    guildQueue.player.stop();
 
-    // Check if there are more songs in the queue
-    if (queue.length > 0) {
-      // Play the next song without sending the "Now playing" message
-      playNextSong(client, message, false);
+    if (guildQueue.songs.length > 0) {
+      playNextSong(client, message.guild.id, false);
     } else {
-      // No more songs, stop playback
-      stopPlayback(client);
+      stopPlayback(client, message.guild.id);
       message.channel.send("No more songs in the queue.");
     }
-  }
+  },
 };

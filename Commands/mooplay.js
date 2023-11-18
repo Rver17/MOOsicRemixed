@@ -16,8 +16,22 @@ const {
   EmbedBuilder,
 } = require("discord.js");
 
-// Create a queue to store songs and variables to track total songs played and playing state
-const queue = [];
+// Create a Map to store guild-specific queues
+const guildQueues = new Map();
+
+function getGuildQueue(guildId) {
+  if (!guildQueues.has(guildId)) {
+    guildQueues.set(guildId, {
+      songs: [],
+      totalSongsPlayed: 0,
+      isPlaying: false,
+      player: null,
+      connection: null,
+    });
+  }
+  return guildQueues.get(guildId);
+}
+
 let totalSongsPlayed = 0;
 const state = {
   isPlaying: false,
@@ -50,34 +64,35 @@ async function getVideoDuration(videoUrl) {
   }
 }
 
-async function playNextSong(client, message, sendNowPlayingMessage = true) {
-  console.log("playNextSong function called");
-  if (queue.length > 0) {
-    const nextSong = queue.shift();
+async function playNextSong(client, guildId, sendNowPlayingMessage = true) {
+  const queue = getGuildQueue(guildId);
+  if (queue.songs.length > 0) {
+    const nextSong = queue.songs.shift();
     console.log(`Playing next song: ${nextSong.videoTitle}`);
 
     try {
       const stream = ytdl(nextSong.videoUrl, { filter: "audioonly" });
       const resource = createAudioResource(stream);
 
-      client.player.play(resource);
-      state.isPlaying = true;
+      queue.player.play(resource);
+      queue.isPlaying = true;
 
       client.user.setActivity(nextSong.videoTitle, { type: "PLAYING" });
 
       if (sendNowPlayingMessage) {
-        const nowPlayingMessage = await message.channel.send(
-          `Now playing (Song ${nextSong.songNumber}): [**${nextSong.videoTitle}**]`
-        );
+        const nowPlayingMessage = await client.channels.cache
+          .get(nextSong.textChannelId)
+          .send(
+            `Now playing (Song ${nextSong.songNumber}): [**${nextSong.videoTitle}**]`
+          );
 
-        clearInterval(progressInterval);
+        clearInterval(queue.progressInterval);
 
         let currentTime = 0;
-
-        progressInterval = setInterval(async () => {
+        queue.progressInterval = setInterval(async () => {
           currentTime += 15;
           if (currentTime > nextSong.duration) {
-            clearInterval(progressInterval);
+            clearInterval(queue.progressInterval);
             return;
           }
 
@@ -92,19 +107,21 @@ async function playNextSong(client, message, sendNowPlayingMessage = true) {
       }
     } catch (error) {
       console.error("Error playing next song:", error);
-      message.channel.send("Error playing the next song in the queue.");
+      client.channels.cache
+        .get(nextSong.textChannelId)
+        .send("Error playing the next song in the queue.");
     }
   } else {
     console.log("No more songs to play, setting isPlaying to false");
-    state.isPlaying = false;
-    totalSongsPlayed = 0;
-
-    clearInterval(progressInterval);
+    queue.isPlaying = false;
+    queue.totalSongsPlayed = 0;
+    clearInterval(queue.progressInterval);
     client.user.setActivity();
   }
 }
 
-function stopPlayback(client) {
+function stopPlayback(client, guildId) {
+  const queue = getGuildQueue(guildId);
   console.log(
     "stopPlayback function called, stopping player and destroying connection"
   );
@@ -116,9 +133,9 @@ function stopPlayback(client) {
   state.isPlaying = false;
 }
 
-function clearQueue() {
-  console.log("clearQueue function called, clearing queue");
-  queue.length = 0;
+function clearQueue(guildId) {
+  const queue = getGuildQueue(guildId);
+  queue.songs = [];
 }
 
 module.exports = {
@@ -132,6 +149,9 @@ module.exports = {
         "You need to be in a voice channel to play music!"
       );
     }
+
+    const guildId = message.guild.id;
+    const queue = getGuildQueue(guildId);
 
     let videoUrl = args[0];
     let videoTitle = "";
@@ -168,65 +188,60 @@ module.exports = {
     const stream = ytdl(videoUrl, { filter: "audioonly" });
     const resource = createAudioResource(stream);
 
-    if (!client.player) {
-      console.log("Creating a new audio player");
-      client.player = createAudioPlayer();
-
-      client.player.on(AudioPlayerStatus.Idle, () => {
-        console.log("Player is idle");
-        if (queue.length > 0) {
-          console.log("Queue has songs, playing next song");
-          playNextSong(client, message);
-        } else if (!state.isPlaying) {
-          console.log("No songs in queue, stopping playback");
-          stopPlayback(client);
+    // Initialize the player for the guild if it doesn't exist
+    if (!queue.player) {
+      queue.player = createAudioPlayer();
+      queue.player.on(AudioPlayerStatus.Idle, () => {
+        if (queue.songs.length > 0) {
+          playNextSong(client, guildId);
+        } else {
+          queue.isPlaying = false;
         }
       });
     }
 
-    if (!client.connection) {
-      console.log("Joining voice channel");
-      client.connection = joinVoiceChannel({
+    if (!queue.connection) {
+      queue.connection = joinVoiceChannel({
         channelId: voiceChannel.id,
-        guildId: message.guild.id,
+        guildId: guildId,
         adapterCreator: voiceChannel.guild.voiceAdapterCreator,
       });
 
-      client.connection.on(VoiceConnectionStatus.Disconnected, (reason) => {
+      // Attach event listeners to the guild-specific connection
+      queue.connection.on(VoiceConnectionStatus.Disconnected, (reason) => {
         console.log("Connection disconnected, reason:", reason);
-        console.log("Clearing queue and stopping playback");
-        clearQueue();
-        stopPlayback(client);
+        clearQueue(guildId);
+        stopPlayback(client, guildId);
       });
 
-      client.connection.on(VoiceConnectionStatus.Connecting, () => {
+      queue.connection.on(VoiceConnectionStatus.Connecting, () => {
         console.log("Voice connection is connecting");
       });
 
-      client.connection.on(VoiceConnectionStatus.Ready, () => {
+      queue.connection.on(VoiceConnectionStatus.Ready, () => {
         console.log("Voice connection is ready");
       });
 
-      client.connection.on(VoiceConnectionStatus.Destroyed, () => {
+      queue.connection.on(VoiceConnectionStatus.Destroyed, () => {
         console.log("Voice connection is destroyed");
       });
     }
 
-    if (queue.length === 0 && !state.isPlaying) {
-      console.log("Queue is empty, playing new song");
-      totalSongsPlayed++;
-      client.player.play(resource);
-      state.isPlaying = true;
-      queue.push({
+    if (queue.songs.length === 0 && !queue.isPlaying) {
+      queue.totalSongsPlayed++;
+      queue.songs.push({
         resource,
         videoTitle,
         videoUrl,
-        songNumber: totalSongsPlayed,
+        songNumber: queue.totalSongsPlayed,
         duration: videoDuration,
+        textChannelId: message.channel.id, // Store the text channel ID here
       });
+      queue.isPlaying = true;
+      playNextSong(client, guildId);
 
       const nowPlayingMessage = await message.channel.send(
-        `Now playing (Song ${totalSongsPlayed}): [**${videoTitle}**](${videoUrl})`
+        `Now playing (Song ${queue.totalSongsPlayed}): [**${videoTitle}**](${videoUrl})`
       );
 
       client.user.setActivity(videoTitle, { type: "PLAYING" });
@@ -251,16 +266,19 @@ module.exports = {
         );
       }, 15000);
     } else {
-      console.log("Adding song to queue");
-      totalSongsPlayed++;
-      const songNumber = totalSongsPlayed;
-      queue.push({ resource, videoTitle, videoUrl, songNumber });
+      queue.totalSongsPlayed++;
+      queue.songs.push({
+        resource,
+        videoTitle,
+        videoUrl,
+        songNumber: queue.totalSongsPlayed,
+      });
       message.channel.send(
-        `Added to queue (Song ${songNumber}): [**${videoTitle}**](${videoUrl})`
+        `Added to queue (Song ${queue.totalSongsPlayed}): [**${videoTitle}**](${videoUrl})`
       );
     }
 
-    client.connection.subscribe(client.player);
+    queue.connection.subscribe(queue.player);
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -284,7 +302,7 @@ module.exports = {
 
     await message.channel.send({ embeds: [controlEmbed], components: [row] });
   },
-  queue,
+  getGuildQueue,
   playNextSong,
   stopPlayback,
   clearQueue,
