@@ -45,11 +45,11 @@ async function playNextSong(client, message, sendNowPlayingMessage = true) {
     } catch (error) {
       console.error("Error playing next song:", error);
       message.channel.send("Error playing the next song in the queue.");
-      // Handle the error appropriately, perhaps by skipping to the next song
     }
   } else {
     console.log("No more songs to play, setting isPlaying to false");
     state.isPlaying = false;
+    totalSongsPlayed = 0; // Reset totalSongsPlayed when the queue is empty
   }
 }
 
@@ -188,17 +188,17 @@ module.exports = {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("moopause")
-       // .setLabel("Play/Pause")
+        // .setLabel("Play/Pause")
         .setStyle(ButtonStyle.Primary)
         .setEmoji("▶️"),
       new ButtonBuilder()
         .setCustomId("mooskip")
-       // .setLabel("Skip")
+        // .setLabel("Skip")
         .setStyle(ButtonStyle.Primary)
         .setEmoji("⏭️"),
       new ButtonBuilder()
         .setCustomId("moostop")
-       // .setLabel("Stop")
+        // .setLabel("Stop")
         .setStyle(ButtonStyle.Danger)
         .setEmoji("⏹️")
     );
