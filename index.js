@@ -1,14 +1,16 @@
 require("dotenv").config();
-
-const fs = require("fs");
 const { Client, GatewayIntentBits } = require("discord.js");
-const { joinVoiceChannel } = require("@discordjs/voice");
+const MusicQueueManager = require('./Components/MusicQueueManager'); 
+const commandHandler = require('./Components/Main/commandHandler'); 
+const eventHandlers = require('./Components/Main/eventHandlers');
+const config = require('./config'); 
 
-const MusicQueueManager = require('./Components/MusicQueueManager'); // Adjust path as needed
-const queueManager = new MusicQueueManager();
+if (!process.env.DISCORD_BOT_TOKEN) {
+    throw new Error('DISCORD_BOT_TOKEN is not defined in your environment');
+}
 
 const client = new Client({
-  intents: [
+  intents: config.intents || [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
@@ -16,74 +18,19 @@ const client = new Client({
   ],
 });
 
-client.commands = new Map();
-client.player = null;
-client.connection = null;
+const queueManager = new MusicQueueManager();
+client.commands = commandHandler.loadCommands("./Commands");
 
-const commandFiles = fs
-  .readdirSync("./Commands")
-  .filter((file) => file.endsWith(".js"));
-for (const file of commandFiles) {
-  const command = require(`./Commands/${file}`);
-  client.commands.set(command.name, command);
-}
+client.on("interactionCreate", (interaction) => eventHandlers.handleInteractionCreate(interaction, client, queueManager));
+client.on("ready", () => eventHandlers.handleReady(client));
+client.on("messageCreate", (message) => eventHandlers.handleMessageCreate(message, client, queueManager));
 
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isButton()) return;
+const initializeBot = async () => {
+    try {
+        await client.login(process.env.DISCORD_BOT_TOKEN);
+    } catch (error) {
+        console.error("Failed to login:", error);
+    }
+};
 
-  const { customId } = interaction;
-  if (!["moopause", "mooskip", "moostop"].includes(customId)) return;
-
-  // Ensure the interaction is in a guild and the member is in a voice channel
-  if (!interaction.inGuild() || !interaction.member.voice.channel) {
-    await interaction.reply({
-      content: "You need to be in a voice channel to use these controls!",
-      ephemeral: true,
-    });
-    return;
-  }
-
-  const musicCommand = client.commands.get(customId);
-  if (!musicCommand) {
-    await interaction.reply({
-      content: "This command isn't implemented yet!",
-      ephemeral: true,
-    });
-    return;
-  }
-
-  try {
-    // Execute the corresponding command, passing the interaction as the first parameter
-    await musicCommand.execute(interaction, [], client, queueManager); // Note: 'args' is passed as an empty array
-  } catch (error) {
-    console.error(error);
-    await interaction.reply({
-      content: "There was an error executing that command!",
-      ephemeral: true,
-    });
-  }
-});
-
-client.on("ready", () => {
-  console.log(`Logged in as ${client.user.tag}!`);
-});
-
-client.on("messageCreate", async (message) => {
-  if (message.author.bot) return;
-  if (!message.content.startsWith("!")) return;
-
-  const args = message.content.slice(1).split(/ +/);
-  const commandName = args.shift().toLowerCase();
-
-  if (!client.commands.has(commandName)) return;
-
-  const command = client.commands.get(commandName);
-  try {
-    command.execute(message, args, client, queueManager);
-  } catch (error) {
-    console.error(error);
-    message.channel.send("There was an error executing that command!");
-  }
-});
-
-client.login(process.env.DISCORD_BOT_TOKEN);
+initializeBot();
