@@ -37,6 +37,9 @@ async function playNextSong(client, message, sendNowPlayingMessage = true) {
       client.player.play(resource); // Play the new resource
       state.isPlaying = true;
 
+      // Update bot's status with the currently playing song title
+      client.user.setActivity(nextSong.videoTitle, { type: "PLAYING" });
+
       if (sendNowPlayingMessage) {
         message.channel.send(
           `Now playing (Song ${nextSong.songNumber}): [**${nextSong.videoTitle}**]`
@@ -50,6 +53,9 @@ async function playNextSong(client, message, sendNowPlayingMessage = true) {
     console.log("No more songs to play, setting isPlaying to false");
     state.isPlaying = false;
     totalSongsPlayed = 0; // Reset totalSongsPlayed when the queue is empty
+
+    // Clear the bot's status when no song is playing
+    client.user.setActivity();
   }
 }
 
