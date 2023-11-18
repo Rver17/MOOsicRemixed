@@ -23,6 +23,23 @@ const state = {
   isPlaying: false,
 }; // Flag to track if a song is currently playing
 
+function createProgressBar(current, total) {
+  const totalBars = 20;
+  const currentBars = Math.round((current / total) * totalBars);
+  const remainingBars = totalBars - currentBars;
+  const progressBar =
+    "▬".repeat(currentBars) + "🔘" + "▬".repeat(remainingBars);
+  return progressBar;
+}
+
+let progressInterval;
+
+function formatTime(seconds) {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${minutes}:${remainingSeconds < 10 ? "0" : ""}${remainingSeconds}`;
+}
+
 async function playNextSong(client, message, sendNowPlayingMessage = true) {
   console.log("playNextSong function called");
   if (queue.length > 0) {
@@ -41,9 +58,34 @@ async function playNextSong(client, message, sendNowPlayingMessage = true) {
       client.user.setActivity(nextSong.videoTitle, { type: "PLAYING" });
 
       if (sendNowPlayingMessage) {
-        message.channel.send(
+        const nowPlayingMessage = await message.channel.send(
           `Now playing (Song ${nextSong.songNumber}): [**${nextSong.videoTitle}**]`
         );
+
+        // Clear any existing interval
+        clearInterval(progressInterval);
+
+        // Initialize the current time
+        let currentTime = 0;
+
+        // Start a new interval
+        progressInterval = setInterval(async () => {
+          currentTime += 15; // Increment time by 15 seconds
+          if (currentTime > nextSong.duration) {
+            clearInterval(progressInterval);
+            return;
+          }
+
+          // Calculate the current progress
+          const progressBar = createProgressBar(currentTime, nextSong.duration);
+          const formattedTime = formatTime(currentTime);
+          const formattedDuration = formatTime(nextSong.duration);
+
+          // Update the message
+          await nowPlayingMessage.edit(
+            `${progressBar} (${formattedTime}/${formattedDuration})`
+          );
+        }, 15000);
       }
     } catch (error) {
       console.error("Error playing next song:", error);
@@ -54,6 +96,7 @@ async function playNextSong(client, message, sendNowPlayingMessage = true) {
     state.isPlaying = false;
     totalSongsPlayed = 0; // Reset totalSongsPlayed when the queue is empty
 
+    clearInterval(progressInterval);
     // Clear the bot's status when no song is playing
     client.user.setActivity();
   }
