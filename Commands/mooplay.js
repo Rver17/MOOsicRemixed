@@ -46,6 +46,17 @@ module.exports = {
       }
       videoUrl = searchResults.results[0].link;
       videoTitle = searchResults.results[0].title;
+    } else {
+      console.log("Valid URL, fetching video details");
+      try {
+        const videoInfo = await ytdl.getInfo(videoUrl);
+        videoTitle = videoInfo.videoDetails.title;
+      } catch (error) {
+        console.error("Error fetching video details: ", error);
+        return message.channel.send(
+          "There was an error fetching video details."
+        );
+      }
     }
 
     const stream = ytdl(videoUrl, { filter: "audioonly" });
