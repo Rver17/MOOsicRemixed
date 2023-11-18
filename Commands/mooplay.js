@@ -10,14 +10,18 @@ const {
   VoiceConnectionStatus,
 } = require("@discordjs/voice");
 
-// Create a queue to store songs and a variable to track total songs played
+// Create a queue to store songs and variables to track total songs played and playing state
 const queue = [];
 let totalSongsPlayed = 0;
+const state = {
+  isPlaying: false,
+}; // Flag to track if a song is currently playing
 
 module.exports = {
   name: "mooplay",
   description: "Play a song from YouTube",
   async execute(message, args, client) {
+    console.log("Execute function called");
     const voiceChannel = message.member.voice.channel;
     if (!voiceChannel) {
       return message.channel.send(
@@ -29,6 +33,7 @@ module.exports = {
     let videoTitle = "";
 
     if (!ytdl.validateURL(videoUrl)) {
+      console.log("Invalid URL, searching on YouTube");
       const opts = {
         maxResults: 1,
         key: process.env.YOUTUBE_API_KEY,
@@ -46,86 +51,116 @@ module.exports = {
     const stream = ytdl(videoUrl, { filter: "audioonly" });
     const resource = createAudioResource(stream);
 
-    if (client.player && client.connection) {
+    if (!client.player) {
+      console.log("Creating a new audio player");
+      client.player = createAudioPlayer();
+
+      client.player.on(AudioPlayerStatus.Idle, () => {
+        console.log("Player is idle");
+        if (queue.length > 0) {
+          console.log("Queue has songs, playing next song");
+          playNextSong(client, message);
+        } else if (!state.isPlaying) {
+          console.log("No songs in queue, stopping playback");
+          stopPlayback(client);
+        }
+      });
+    }
+
+    if (!client.connection) {
+      console.log("Joining voice channel");
+      client.connection = joinVoiceChannel({
+        channelId: voiceChannel.id,
+        guildId: message.guild.id,
+        adapterCreator: voiceChannel.guild.voiceAdapterCreator,
+      });
+
+      client.connection.on(VoiceConnectionStatus.Disconnected, (reason) => {
+        console.log("Connection disconnected, reason:", reason);
+        console.log("Clearing queue and stopping playback");
+        clearQueue();
+        stopPlayback(client);
+      });
+
+      client.connection.on(VoiceConnectionStatus.Connecting, () => {
+        console.log("Voice connection is connecting");
+      });
+
+      client.connection.on(VoiceConnectionStatus.Ready, () => {
+        console.log("Voice connection is ready");
+      });
+
+      client.connection.on(VoiceConnectionStatus.Destroyed, () => {
+        console.log("Voice connection is destroyed");
+      });
+    }
+
+    if (queue.length === 0 && !state.isPlaying) {
+      console.log("Queue is empty, playing new song");
+      totalSongsPlayed++;
+      client.player.play(resource);
+      state.isPlaying = true;
+      queue.push({
+        resource,
+        videoTitle,
+        videoUrl,
+        songNumber: totalSongsPlayed,
+      });
+      message.channel.send(
+        `Now playing (Song ${totalSongsPlayed}): [**${videoTitle}**](${videoUrl})`
+      );
+    } else {
+      console.log("Adding song to queue");
       totalSongsPlayed++;
       const songNumber = totalSongsPlayed;
       queue.push({ resource, videoTitle, videoUrl, songNumber });
       message.channel.send(
         `Added to queue (Song ${songNumber}): [**${videoTitle}**](${videoUrl})`
       );
-    } else {
-      const player = createAudioPlayer();
-      const connection = joinVoiceChannel({
-        channelId: voiceChannel.id,
-        guildId: message.guild.id,
-        adapterCreator: message.guild.voiceAdapterCreator,
-      });
-
-      client.player = player;
-      client.connection = connection;
-
-      try {
-        connection.on(VoiceConnectionStatus.Ready, () => {
-          if (connection && connection.voice) {
-            try {
-              connection.voice.setSelfDeaf(true);
-            } catch (err) {
-              console.error("Error setting self-deaf:", err);
-            }
-          }
-        });
-
-        connection.on(VoiceConnectionStatus.Disconnected, () => {
-          setTimeout(() => {
-            if (
-              connection.state.status === VoiceConnectionStatus.Disconnected
-            ) {
-              connection.destroy();
-            }
-          }, 5000);
-        });
-
-        totalSongsPlayed++;
-        player.play(resource);
-        connection.subscribe(player);
-
-        player.on(AudioPlayerStatus.Idle, () => {
-          if (queue.length > 0) {
-            const nextSong = queue.shift();
-            message.channel.send(
-              `Finished playing (Song ${nextSong.songNumber}): [**${nextSong.videoTitle}**](${nextSong.videoUrl})`
-            );
-
-            if (queue.length > 0) {
-              const nextSong = queue[0];
-              player.play(nextSong.resource);
-              message.channel.send(
-                `Now playing (Song ${nextSong.songNumber}): [**${nextSong.videoTitle}**](${nextSong.videoUrl})`
-              );
-            } else {
-              player.stop();
-              connection.destroy();
-              // Reset totalSongsPlayed when queue is empty
-              totalSongsPlayed = 0;
-            }
-          } else {
-            player.stop();
-            connection.destroy();
-            // Reset totalSongsPlayed when queue is empty
-            totalSongsPlayed = 0;
-          }
-        });
-
-        message.channel.send(
-          `Now playing (Song ${totalSongsPlayed}): [**${videoTitle}**](${videoUrl})`
-        );
-      } catch (err) {
-        console.error(err);
-        message.channel.send(
-          "An error occurred while trying to play the audio."
-        );
-      }
     }
+
+    client.connection.subscribe(client.player);
   },
   queue,
 };
+
+function playNextSong(client, message, sendNowPlayingMessage = true) {
+  console.log("playNextSong function called");
+  if (queue.length > 0) {
+    const nextSong = queue.shift();
+    console.log(`Playing next song: ${nextSong.videoTitle}`);
+    client.player.play(nextSong.resource);
+    state.isPlaying = true;
+    if (sendNowPlayingMessage) {
+      message.channel.send(
+        `Now playing (Song ${nextSong.songNumber}): [**${nextSong.videoTitle}**](${nextSong.videoUrl})`
+      );
+    }
+  } else {
+    console.log("No more songs to play, setting isPlaying to false");
+    state.isPlaying = false;
+  }
+}
+
+function stopPlayback(client) {
+  console.log(
+    "stopPlayback function called, stopping player and destroying connection"
+  );
+  client.player.stop();
+  client.connection.destroy();
+  client.connection = null;
+  client.player = null;
+  totalSongsPlayed = 0;
+  state.isPlaying = false;
+}
+
+function clearQueue() {
+  console.log("clearQueue function called, clearing queue");
+  queue.length = 0;
+}
+
+module.exports.playNextSong = playNextSong;
+module.exports.stopPlayback = stopPlayback;
+module.exports.clearQueue = clearQueue;
+module.exports.queue = queue;
+module.exports.state = state;
