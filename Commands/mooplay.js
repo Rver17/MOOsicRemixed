@@ -218,12 +218,39 @@ module.exports = {
         videoTitle,
         videoUrl,
         songNumber: totalSongsPlayed,
+        duration: videoDuration, // Make sure to have videoDuration available here
       });
-      message.channel.send(
+
+      const nowPlayingMessage = await message.channel.send(
         `Now playing (Song ${totalSongsPlayed}): [**${videoTitle}**](${videoUrl})`
       );
+
       // Update bot's status with the currently playing song title
       client.user.setActivity(videoTitle, { type: "PLAYING" });
+
+      // Clear any existing interval
+      clearInterval(progressInterval);
+
+      // Initialize the current time
+      let currentTime = 0;
+
+      // Start a new interval for the progress bar
+      progressInterval = setInterval(async () => {
+        currentTime += 15;
+        if (currentTime > videoDuration) {
+          clearInterval(progressInterval);
+          return;
+        }
+
+        const progressBar = createProgressBar(currentTime, videoDuration);
+        const formattedTime = formatTime(currentTime);
+        const formattedDuration = formatTime(videoDuration);
+
+        // Update the message with the progress bar
+        await nowPlayingMessage.edit(
+          `${progressBar} (${formattedTime}/${formattedDuration})`
+        );
+      }, 15000);
     } else {
       console.log("Adding song to queue");
       totalSongsPlayed++;
