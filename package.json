@@ -1,11 +1,11 @@
 {
   "name": "moosic-remixed",
   "version": "2.0.0",
-  "description": "A New Remixed Way on playing Music from Youtube, Soundcloud, and more!",
+  "description": "A New Remixed Way of playing Music from Youtube, Soundcloud, and more!",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js", 
-    "test": "!play"
+    "start": "npm install && node index.js", 
+    "test": "node index.js"
   },
   "author": "Korozoma",
   "license": "UNLICENSED",
