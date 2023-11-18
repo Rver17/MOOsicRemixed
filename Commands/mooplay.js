@@ -9,6 +9,12 @@ const {
   AudioPlayerStatus,
   VoiceConnectionStatus,
 } = require("@discordjs/voice");
+const {
+  ButtonBuilder,
+  ActionRowBuilder,
+  ButtonStyle,
+  EmbedBuilder,
+} = require("discord.js");
 
 // Create a queue to store songs and variables to track total songs played and playing state
 const queue = [];
@@ -16,6 +22,53 @@ let totalSongsPlayed = 0;
 const state = {
   isPlaying: false,
 }; // Flag to track if a song is currently playing
+
+async function playNextSong(client, message, sendNowPlayingMessage = true) {
+  console.log("playNextSong function called");
+  if (queue.length > 0) {
+    const nextSong = queue.shift();
+    console.log(`Playing next song: ${nextSong.videoTitle}`);
+
+    try {
+      // Create a new stream for the next song
+      const stream = ytdl(nextSong.videoUrl, { filter: "audioonly" });
+      const resource = createAudioResource(stream);
+
+      client.player.play(resource); // Play the new resource
+      state.isPlaying = true;
+
+      if (sendNowPlayingMessage) {
+        message.channel.send(
+          `Now playing (Song ${nextSong.songNumber}): [**${nextSong.videoTitle}**]`
+        );
+      }
+    } catch (error) {
+      console.error("Error playing next song:", error);
+      message.channel.send("Error playing the next song in the queue.");
+      // Handle the error appropriately, perhaps by skipping to the next song
+    }
+  } else {
+    console.log("No more songs to play, setting isPlaying to false");
+    state.isPlaying = false;
+  }
+}
+
+function stopPlayback(client) {
+  console.log(
+    "stopPlayback function called, stopping player and destroying connection"
+  );
+  client.player.stop();
+  client.connection.destroy();
+  client.connection = null;
+  client.player = null;
+  totalSongsPlayed = 0;
+  state.isPlaying = false;
+}
+
+function clearQueue() {
+  console.log("clearQueue function called, clearing queue");
+  queue.length = 0;
+}
 
 module.exports = {
   name: "mooplay",
@@ -131,59 +184,35 @@ module.exports = {
     }
 
     client.connection.subscribe(client.player);
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("moopause")
+       // .setLabel("Play/Pause")
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji("▶️"),
+      new ButtonBuilder()
+        .setCustomId("mooskip")
+       // .setLabel("Skip")
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji("⏭️"),
+      new ButtonBuilder()
+        .setCustomId("moostop")
+       // .setLabel("Stop")
+        .setStyle(ButtonStyle.Danger)
+        .setEmoji("⏹️")
+    );
+
+    const controlEmbed = new EmbedBuilder()
+      .setColor(0x0099ff)
+      .setTitle("Music Controls")
+      .setDescription("Use the buttons below to control the music!");
+
+    await message.channel.send({ embeds: [controlEmbed], components: [row] });
   },
   queue,
+  playNextSong,
+  stopPlayback,
+  clearQueue,
+  state,
 };
-
-async function playNextSong(client, message, sendNowPlayingMessage = true) {
-  console.log("playNextSong function called");
-  if (queue.length > 0) {
-    const nextSong = queue.shift();
-    console.log(`Playing next song: ${nextSong.videoTitle}`);
-
-    try {
-      // Create a new stream for the next song
-      const stream = ytdl(nextSong.videoUrl, { filter: "audioonly" });
-      const resource = createAudioResource(stream);
-
-      client.player.play(resource); // Play the new resource
-      state.isPlaying = true;
-
-      if (sendNowPlayingMessage) {
-        message.channel.send(
-          `Now playing (Song ${nextSong.songNumber}): [**${nextSong.videoTitle}**]`
-        );
-      }
-    } catch (error) {
-      console.error("Error playing next song:", error);
-      message.channel.send("Error playing the next song in the queue.");
-      // Handle the error appropriately, perhaps by skipping to the next song
-    }
-  } else {
-    console.log("No more songs to play, setting isPlaying to false");
-    state.isPlaying = false;
-  }
-}
-
-function stopPlayback(client) {
-  console.log(
-    "stopPlayback function called, stopping player and destroying connection"
-  );
-  client.player.stop();
-  client.connection.destroy();
-  client.connection = null;
-  client.player = null;
-  totalSongsPlayed = 0;
-  state.isPlaying = false;
-}
-
-function clearQueue() {
-  console.log("clearQueue function called, clearing queue");
-  queue.length = 0;
-}
-
-module.exports.playNextSong = playNextSong;
-module.exports.stopPlayback = stopPlayback;
-module.exports.clearQueue = clearQueue;
-module.exports.queue = queue;
-module.exports.state = state;

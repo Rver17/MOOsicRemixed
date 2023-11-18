@@ -1,6 +1,6 @@
-require('dotenv').config();
+require("dotenv").config();
 
-const fs = require('fs');
+const fs = require("fs");
 const { Client, GatewayIntentBits } = require("discord.js");
 const { joinVoiceChannel } = require("@discordjs/voice");
 
@@ -14,14 +14,52 @@ const client = new Client({
 });
 
 client.commands = new Map();
-client.player = null; 
-client.connection = null; 
+client.player = null;
+client.connection = null;
 
-const commandFiles = fs.readdirSync('./Commands').filter(file => file.endsWith('.js'));
+const commandFiles = fs
+  .readdirSync("./Commands")
+  .filter((file) => file.endsWith(".js"));
 for (const file of commandFiles) {
   const command = require(`./Commands/${file}`);
   client.commands.set(command.name, command);
 }
+
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isButton()) return;
+
+  const { customId } = interaction;
+  if (!["moopause", "mooskip", "moostop"].includes(customId)) return;
+
+  // Ensure the interaction is in a guild and the member is in a voice channel
+  if (!interaction.inGuild() || !interaction.member.voice.channel) {
+    await interaction.reply({
+      content: "You need to be in a voice channel to use these controls!",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const musicCommand = client.commands.get(customId);
+  if (!musicCommand) {
+    await interaction.reply({
+      content: "This command isn't implemented yet!",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  try {
+    // Execute the corresponding command, passing the interaction as the first parameter
+    await musicCommand.execute(interaction, [], client); // Note: 'args' is passed as an empty array
+  } catch (error) {
+    console.error(error);
+    await interaction.reply({
+      content: "There was an error executing that command!",
+      ephemeral: true,
+    });
+  }
+});
 
 client.on("ready", () => {
   console.log(`Logged in as ${client.user.tag}!`);
@@ -38,10 +76,10 @@ client.on("messageCreate", async (message) => {
 
   const command = client.commands.get(commandName);
   try {
-    command.execute(message, args, client); 
+    command.execute(message, args, client);
   } catch (error) {
     console.error(error);
-    message.channel.send('There was an error executing that command!');
+    message.channel.send("There was an error executing that command!");
   }
 });
 
