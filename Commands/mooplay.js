@@ -32,12 +32,22 @@ function createProgressBar(current, total) {
   return progressBar;
 }
 
-let progressInterval;
-
 function formatTime(seconds) {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
   return `${minutes}:${remainingSeconds < 10 ? "0" : ""}${remainingSeconds}`;
+}
+
+let progressInterval;
+
+async function getVideoDuration(videoUrl) {
+  try {
+    const info = await ytdl.getInfo(videoUrl);
+    return parseInt(info.videoDetails.lengthSeconds, 10); // Duration in seconds
+  } catch (error) {
+    console.error("Error fetching video details: ", error);
+    return 0; // Return 0 if unable to fetch the duration
+  }
 }
 
 async function playNextSong(client, message, sendNowPlayingMessage = true) {
@@ -47,14 +57,12 @@ async function playNextSong(client, message, sendNowPlayingMessage = true) {
     console.log(`Playing next song: ${nextSong.videoTitle}`);
 
     try {
-      // Create a new stream for the next song
       const stream = ytdl(nextSong.videoUrl, { filter: "audioonly" });
       const resource = createAudioResource(stream);
 
-      client.player.play(resource); // Play the new resource
+      client.player.play(resource);
       state.isPlaying = true;
 
-      // Update bot's status with the currently playing song title
       client.user.setActivity(nextSong.videoTitle, { type: "PLAYING" });
 
       if (sendNowPlayingMessage) {
@@ -62,26 +70,21 @@ async function playNextSong(client, message, sendNowPlayingMessage = true) {
           `Now playing (Song ${nextSong.songNumber}): [**${nextSong.videoTitle}**]`
         );
 
-        // Clear any existing interval
         clearInterval(progressInterval);
 
-        // Initialize the current time
         let currentTime = 0;
 
-        // Start a new interval
         progressInterval = setInterval(async () => {
-          currentTime += 15; // Increment time by 15 seconds
+          currentTime += 15;
           if (currentTime > nextSong.duration) {
             clearInterval(progressInterval);
             return;
           }
 
-          // Calculate the current progress
           const progressBar = createProgressBar(currentTime, nextSong.duration);
           const formattedTime = formatTime(currentTime);
           const formattedDuration = formatTime(nextSong.duration);
 
-          // Update the message
           await nowPlayingMessage.edit(
             `${progressBar} (${formattedTime}/${formattedDuration})`
           );
@@ -94,10 +97,9 @@ async function playNextSong(client, message, sendNowPlayingMessage = true) {
   } else {
     console.log("No more songs to play, setting isPlaying to false");
     state.isPlaying = false;
-    totalSongsPlayed = 0; // Reset totalSongsPlayed when the queue is empty
+    totalSongsPlayed = 0;
 
     clearInterval(progressInterval);
-    // Clear the bot's status when no song is playing
     client.user.setActivity();
   }
 }
@@ -133,6 +135,7 @@ module.exports = {
 
     let videoUrl = args[0];
     let videoTitle = "";
+    let videoDuration = 0;
 
     if (!ytdl.validateURL(videoUrl)) {
       console.log("Invalid URL, searching on YouTube");
@@ -141,18 +144,19 @@ module.exports = {
         key: process.env.YOUTUBE_API_KEY,
         type: "video",
       };
-
       const searchResults = await search(args.join(" "), opts);
       if (searchResults.results.length === 0) {
         return message.channel.send("No results found.");
       }
       videoUrl = searchResults.results[0].link;
       videoTitle = searchResults.results[0].title;
+      videoDuration = await getVideoDuration(videoUrl);
     } else {
       console.log("Valid URL, fetching video details");
       try {
         const videoInfo = await ytdl.getInfo(videoUrl);
         videoTitle = videoInfo.videoDetails.title;
+        videoDuration = parseInt(videoInfo.videoDetails.lengthSeconds, 10);
       } catch (error) {
         console.error("Error fetching video details: ", error);
         return message.channel.send(
@@ -218,23 +222,19 @@ module.exports = {
         videoTitle,
         videoUrl,
         songNumber: totalSongsPlayed,
-        duration: videoDuration, // Make sure to have videoDuration available here
+        duration: videoDuration,
       });
 
       const nowPlayingMessage = await message.channel.send(
         `Now playing (Song ${totalSongsPlayed}): [**${videoTitle}**](${videoUrl})`
       );
 
-      // Update bot's status with the currently playing song title
       client.user.setActivity(videoTitle, { type: "PLAYING" });
 
-      // Clear any existing interval
       clearInterval(progressInterval);
 
-      // Initialize the current time
       let currentTime = 0;
 
-      // Start a new interval for the progress bar
       progressInterval = setInterval(async () => {
         currentTime += 15;
         if (currentTime > videoDuration) {
@@ -246,7 +246,6 @@ module.exports = {
         const formattedTime = formatTime(currentTime);
         const formattedDuration = formatTime(videoDuration);
 
-        // Update the message with the progress bar
         await nowPlayingMessage.edit(
           `${progressBar} (${formattedTime}/${formattedDuration})`
         );
@@ -266,17 +265,14 @@ module.exports = {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("moopause")
-        // .setLabel("Play/Pause")
         .setStyle(ButtonStyle.Primary)
         .setEmoji("▶️"),
       new ButtonBuilder()
         .setCustomId("mooskip")
-        // .setLabel("Skip")
         .setStyle(ButtonStyle.Primary)
         .setEmoji("⏭️"),
       new ButtonBuilder()
         .setCustomId("moostop")
-        // .setLabel("Stop")
         .setStyle(ButtonStyle.Danger)
         .setEmoji("⏹️")
     );

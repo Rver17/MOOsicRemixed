@@ -1,6 +1,6 @@
 {
   "name": "moosic-remixed",
-  "version": "1.7.2",
+  "version": "1.8.0",
   "description": "A New Remixed Way on playing Music from Youtube, Soundcloud, and more!",
   "main": "index.js",
   "scripts": {
