@@ -24,7 +24,7 @@ const state = {
 }; // Flag to track if a song is currently playing
 
 function createProgressBar(current, total) {
-  const totalBars = 20;
+  const totalBars = 10;
   const currentBars = Math.round((current / total) * totalBars);
   const remainingBars = totalBars - currentBars;
   const progressBar =
