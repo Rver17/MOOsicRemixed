@@ -135,17 +135,29 @@ module.exports = {
   queue,
 };
 
-function playNextSong(client, message, sendNowPlayingMessage = true) {
+async function playNextSong(client, message, sendNowPlayingMessage = true) {
   console.log("playNextSong function called");
   if (queue.length > 0) {
     const nextSong = queue.shift();
     console.log(`Playing next song: ${nextSong.videoTitle}`);
-    client.player.play(nextSong.resource);
-    state.isPlaying = true;
-    if (sendNowPlayingMessage) {
-      message.channel.send(
-        `Now playing (Song ${nextSong.songNumber}): [**${nextSong.videoTitle}**](${nextSong.videoUrl})`
-      );
+
+    try {
+      // Create a new stream for the next song
+      const stream = ytdl(nextSong.videoUrl, { filter: "audioonly" });
+      const resource = createAudioResource(stream);
+
+      client.player.play(resource); // Play the new resource
+      state.isPlaying = true;
+
+      if (sendNowPlayingMessage) {
+        message.channel.send(
+          `Now playing (Song ${nextSong.songNumber}): [**${nextSong.videoTitle}**]`
+        );
+      }
+    } catch (error) {
+      console.error("Error playing next song:", error);
+      message.channel.send("Error playing the next song in the queue.");
+      // Handle the error appropriately, perhaps by skipping to the next song
     }
   } else {
     console.log("No more songs to play, setting isPlaying to false");
