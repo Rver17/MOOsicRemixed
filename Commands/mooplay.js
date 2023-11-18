@@ -179,6 +179,8 @@ module.exports = {
       message.channel.send(
         `Now playing (Song ${totalSongsPlayed}): [**${videoTitle}**](${videoUrl})`
       );
+      // Update bot's status with the currently playing song title
+      client.user.setActivity(videoTitle, { type: "PLAYING" });
     } else {
       console.log("Adding song to queue");
       totalSongsPlayed++;
